@@ -120,8 +120,7 @@ impl Lexer {
                         match result {
                             Some((matched, rest)) => {
                                 current = String::from(rest);
-                                let token = *matched;
-                                tokens.push(token.clone());
+                                tokens.push(*matched);
                             }
                             None => {
                                 // unexpected token found or no matched at the end, break this line

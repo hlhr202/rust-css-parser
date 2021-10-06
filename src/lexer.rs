@@ -9,8 +9,10 @@ lazy_static! {
     static ref SINGLE_QUOTE_STRING: Regex = Regex::new(r#"^"(?:[^"\\]|\\.)*""#).unwrap();
     // "testValue\""
     static ref DOUBLE_QUOTE_STRING: Regex = Regex::new(r"^'(?:[^'\\]|\\.)*'").unwrap();
-    // -test-value1 -test1 test1
-    static ref WORD: Regex = Regex::new(r"^-?[a-zA-Z]{1,}(-?[a-zA-Z0-9]){0,}").unwrap();
+    // #999 #999FFF #abc
+    static ref HEX_VALUE: Regex = Regex::new(r"^#[0-9a-fA-F]{3,6}").unwrap();
+    // -test-value1 -test1 .test1 #test1 test1
+    static ref WORD: Regex = Regex::new(r"^(\.|-|#)?[a-zA-Z]{1,}(-?[a-zA-Z0-9]){0,}").unwrap();
     // 000
     static ref NUMBER: Regex = Regex::new(r"^\d+").unwrap();
     //    
@@ -19,8 +21,6 @@ lazy_static! {
     static ref PAREN: Regex = Regex::new(r"^[\{\}\(\)\[\]]").unwrap();
     // @,:;#&%+-*/.
     static ref PUNCTUATOR: Regex = Regex::new(r"^[@,:;#&%\+\-\*/\.]").unwrap();
-    // #999 #999FFF #abc
-    static ref HEX_VALUE: Regex = Regex::new(r"^#[0-9a-fA-F]{3,6}").unwrap();
 }
 
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ pub struct Location {
 
 #[derive(Debug, Clone)]
 pub enum Token {
-    QuoteString(String, Location),
+    String(String, Location),
     Paren(String, Location),
     Word(String, Location),
     Punctuator(String, Location),
@@ -102,19 +102,19 @@ impl Lexer {
                 Ok(line) => {
                     let mut current = line.clone();
                     self.col = 0;
-                    loop {
+                    'loop_for_token: loop {
                         let result = self
-                            .match_rule(&current, &WORD, Token::Word)
+                            .match_rule(&current, &HEX_VALUE, Token::Hex)
+                            .or_else(|| self.match_rule(&current, &WORD, Token::Word))
                             .or_else(|| self.match_rule(&current, &NUMBER, Token::Number))
                             .or_else(|| self.match_rule(&current, &SPACE, Token::Space))
                             .or_else(|| {
-                                self.match_rule(&current, &SINGLE_QUOTE_STRING, Token::QuoteString)
+                                self.match_rule(&current, &SINGLE_QUOTE_STRING, Token::String)
                             })
                             .or_else(|| {
-                                self.match_rule(&current, &DOUBLE_QUOTE_STRING, Token::QuoteString)
+                                self.match_rule(&current, &DOUBLE_QUOTE_STRING, Token::String)
                             })
                             .or_else(|| self.match_rule(&current, &PAREN, Token::Paren))
-                            .or_else(|| self.match_rule(&current, &HEX_VALUE, Token::Hex))
                             .or_else(|| self.match_rule(&current, &PUNCTUATOR, Token::Punctuator));
 
                         match result {
@@ -124,7 +124,7 @@ impl Lexer {
                             }
                             None => {
                                 // unexpected token found or no matched at the end, break this line
-                                break;
+                                break 'loop_for_token;
                             }
                         }
                     }

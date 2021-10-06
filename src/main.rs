@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 mod lexer;
+mod parser;
 
 use async_std::fs::File;
 use async_std::io::BufReader;
@@ -21,6 +22,11 @@ async fn read(path: &String) -> io::Result<()> {
         index += 1;
         println!("{:?}", token);
     }
+    println!();
+    println!();
+    println!();
+    let mut parser = parser::Parser::new(&tokens);
+    parser.parse();
     Ok(())
 }
 

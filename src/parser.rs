@@ -1,17 +1,20 @@
 use crate::lexer;
-use lexer::Token;
+use lexer::{Location, Position, Token};
 use std::collections::LinkedList;
 
+#[derive(Debug, Clone)]
 enum NodeType {
     Root,
     Rule,
-    Atrule,
+    Atrule {
+        r#type: String,
+        name: String,
+        params: String,
+        source: Location,
+        value: Option<String>,
+    },
     Decl,
     // Comment,
-}
-
-struct Node {
-    r#type: NodeType,
 }
 
 #[derive(Debug, Clone)]
@@ -68,109 +71,118 @@ impl Parser {
         self.text_processing = None;
     }
 
-    fn parse_value(&mut self) -> Option<String> {
+    fn parse_value(&mut self) -> Option<(String, Position)> {
         self.eat(1); // eat ":"
         self.context.push_back(Context::WaitValue);
         self.clear_string();
-        'value: loop {
+        let mut text = String::new();
+        loop {
             if let Some(token) = self.tokens.get(self.token_counter) {
                 match token {
                     Token::Punctuator(string, location) => match &string[..] {
                         ";" => {
                             // end with ;
+                            let end_loc = location.clone();
                             self.eat(1);
                             self.context.pop_back();
-                            if let Some(value) = &self.text_processing {
-                                return Some(value.clone());
-                            } else {
-                                break 'value;
-                            }
+                            return Some((text, end_loc.end));
                         }
                         _ => {
-                            self.push_string(string.clone());
+                            text.push_str(&string[..]);
                             self.eat(1);
                         }
                     },
-                    Token::Paren(string, location)
-                    | Token::Hex(string, location)
-                    | Token::Number(string, location)
-                    | Token::String(string, location)
-                    | Token::Word(string, location) => {
-                        self.push_string(string.clone());
+                    Token::Paren(string, _)
+                    | Token::Hex(string, _)
+                    | Token::Number(string, _)
+                    | Token::String(string, _)
+                    | Token::Space(string, _)
+                    | Token::Word(string, _) => {
+                        text.push_str(&string[..]);
                         self.eat(1);
                     }
-                    Token::Space(_, _) => self.eat(1),
-                    Token::EndLine => {
+                    Token::EndLine(location) => {
                         // end without ";"
+                        let end_loc = location.clone();
                         self.eat(1);
                         self.context.pop_back();
-                        if let Some(value) = &self.text_processing {
-                            return Some(value.clone());
-                        } else {
-                            break 'value;
-                        }
+                        return Some((text, end_loc.end));
                     }
                 }
+            } else {
+                return None;
             }
         }
-        return None;
     }
 
-    fn parse_atrule(&mut self) {
+    fn parse_atrule(&mut self) -> Option<NodeType> {
+        let start = match self.tokens.get(self.token_counter).unwrap() {
+            Token::Punctuator(_, location) => location.clone().start,
+            _ => unreachable!(),
+        };
+
         self.eat(1); // eat "@"
         self.context.push_back(Context::WaitBracketOrColon);
         self.clear_string();
+        let mut text = String::new();
         match self.tokens.get(self.token_counter) {
-            Some(Token::Word(name, name_location)) => {
-                println!("name: {:?}", self.tokens.get(self.token_counter));
+            Some(Token::Word(name, _)) => {
+                let name = name.clone();
                 self.eat(1); // eat name
                 'atrule: loop {
                     if let Some(token) = self.tokens.get(self.token_counter) {
                         match token {
-                            Token::Paren(string, location) => match &string[..] {
+                            Token::Paren(string, _) => match &string[..] {
                                 "{" => {
                                     // end, shift to InBracket
                                     self.eat(1);
-                                    // if let Some(Context::WaitBracketOrColon) = self.context.back() {
-                                    //     self.context.pop_back();
-                                    // }
                                     self.context.push_back(Context::InBracket);
-                                    break 'atrule;
+
                                     // TODO: parse inbracket
+                                    self.parse_ambient();
+                                    break 'atrule;
                                 }
                                 _ => {
-                                    self.push_string(string.clone());
+                                    text.push_str(&string[..]);
                                     self.eat(1);
                                 }
                             },
-                            Token::Punctuator(string, location) => match &string[..] {
+                            Token::Punctuator(string, _) => match &string[..] {
                                 ":" => {
                                     // TODO: parse value
-                                    if let Some(property) = &self.text_processing {
-                                        println!("property: {}", property);
-                                    }
-                                    if let Some(value) = self.parse_value() {
-                                        println!("value: {}", value);
+                                    if let Some((value, end)) = self.parse_value() {
                                         self.context.pop_back();
-                                        break 'atrule;
+
+                                        let atrule = NodeType::Atrule {
+                                            r#type: String::from("atrule"),
+                                            name: name,
+                                            source: Location {
+                                                start: start,
+                                                end: end,
+                                            },
+                                            params: value.clone(),
+                                            value: Some(value.clone()),
+                                        };
+                                        println!("{:?}", atrule);
+                                        return Some(atrule);
                                     } else {
-                                        // error?
+                                        // TODO: error
                                     }
                                 }
                                 _ => {
-                                    self.push_string(string.clone());
+                                    text.push_str(&string[..]);
                                     self.eat(1);
                                 }
                             },
-                            Token::Hex(string, location)
-                            | Token::Number(string, location)
-                            | Token::String(string, location)
-                            | Token::Word(string, location) => {
-                                self.push_string(string.clone());
+                            Token::Hex(string, _)
+                            | Token::Number(string, _)
+                            | Token::String(string, _)
+                            | Token::Word(string, _) => {
+                                text.push_str(&string[..]);
                                 self.eat(1);
                             }
                             Token::Space(_, _) => self.eat(1),
-                            Token::EndLine => {
+                            Token::EndLine(_) => {
                                 // TODO: error
                                 self.eat(1);
                             }
@@ -185,6 +197,7 @@ impl Parser {
                 self.eat(1);
             }
         };
+        None
     }
 
     fn parse_ambient(&mut self) {

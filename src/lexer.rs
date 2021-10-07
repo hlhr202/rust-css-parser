@@ -15,7 +15,7 @@ lazy_static! {
     static ref WORD: Regex = Regex::new(r"^(\.|-|#)?[a-zA-Z]{1,}(-?[a-zA-Z0-9]){0,}").unwrap();
     // 000
     static ref NUMBER: Regex = Regex::new(r"^\d+").unwrap();
-    //    
+    //
     static ref SPACE: Regex = Regex::new(r"^\s{1,}").unwrap();
     // {}()[]
     static ref PAREN: Regex = Regex::new(r"^[\{\}\(\)\[\]]").unwrap();
@@ -25,14 +25,14 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct Position {
-    row: usize,
-    col: usize,
+    line: usize,
+    column: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct Location {
-    start: Position,
-    end: Position,
+    pub start: Position,
+    pub end: Position,
 }
 
 #[derive(Debug, Clone)]
@@ -44,20 +44,20 @@ pub enum Token {
     Space(String, Location),
     Hex(String, Location),
     Number(String, Location),
-    EndLine,
+    EndLine(Location),
 }
 
 pub struct Lexer {
-    col: usize,
-    row: usize,
+    column: usize,
+    line: usize,
     lines: Lines<BufReader<File>>,
 }
 
 impl Lexer {
     pub fn new(lines: Lines<BufReader<File>>) -> Lexer {
         Lexer {
-            col: 0,
-            row: 0,
+            column: 0,
+            line: 0,
             lines: lines,
         }
     }
@@ -73,14 +73,14 @@ impl Lexer {
             let end = matched.end();
             let rest = &string[end..];
             let start_pos = Position {
-                col: start + self.col,
-                row: self.row,
+                column: start + self.column,
+                line: self.line,
             };
             let end_pos = Position {
-                col: end + self.col,
-                row: self.row,
+                column: end + self.column,
+                line: self.line,
             };
-            self.col += end;
+            self.column += end;
             let token = construct(
                 String::from(matched.as_str()),
                 Location {
@@ -101,7 +101,7 @@ impl Lexer {
             match opt_line {
                 Ok(line) => {
                     let mut current = line.clone();
-                    self.col = 0;
+                    self.column = 0;
                     'loop_for_token: loop {
                         let result = self
                             .match_rule(&current, &HEX_VALUE, Token::Hex)
@@ -128,9 +128,19 @@ impl Lexer {
                             }
                         }
                     }
-
-                    self.row += 1;
-                    tokens.push(Token::EndLine)
+                    let start = Position {
+                        column: self.column,
+                        line: self.line,
+                    };
+                    let end = Position {
+                        column: self.column,
+                        line: self.line,
+                    };
+                    tokens.push(Token::EndLine(Location {
+                        start: start,
+                        end: end,
+                    }));
+                    self.line += 1;
                 }
                 _ => {}
             }

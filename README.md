@@ -93,7 +93,7 @@ main {
             },
             Rule {
                 type: "rule",
-                selector: "data-attr",
+                selector: "[data-attr]",
                 nodes: [
                     Decl {
                         type: "decl",

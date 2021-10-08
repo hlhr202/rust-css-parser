@@ -300,6 +300,7 @@ impl Parser {
                             }
                         }
                         _ => {
+                            text.push_str(string);
                             // TODO error?
                             self.eat(1);
                         }

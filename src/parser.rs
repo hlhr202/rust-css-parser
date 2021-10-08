@@ -1,37 +1,44 @@
 use crate::lexer;
-use lexer::{Location, Position, Token};
+use lexer::{Position, Token};
 use std::collections::LinkedList;
+use serde::{Serialize, Deserialize};
+use serde_json;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum NodeType {
     Root,
-    Rule,
+    Rule {
+        r#type: String,
+        selector: String,
+        nodes: Vec<NodeType>,
+    },
     Atrule {
         r#type: String,
         name: String,
         params: String,
-        source: Location,
+        // source: Location,
         value: Option<String>,
     },
-    Decl,
+    Decl {
+        r#type: String,
+        prop: String,
+        value: String,
+    },
     // Comment,
 }
 
 #[derive(Debug, Clone)]
 enum Context {
     Initial,
-    WaitBracket,
-    InBracket,
+    InBracket(Option<String>), // InBracket with text context
     WaitBracketOrColon,
     WaitValue,
-    InValue,
 }
 
 pub struct Parser {
     context: LinkedList<Context>,
     tokens: Vec<Token>,
     token_counter: usize,
-    text_processing: Option<String>,
 }
 
 impl Parser {
@@ -42,7 +49,6 @@ impl Parser {
             tokens: tokens.clone(),
             context: context,
             token_counter: 0,
-            text_processing: None,
         }
     }
 
@@ -55,26 +61,19 @@ impl Parser {
         self.token_counter += len;
     }
 
-    fn push_string(&mut self, string: String) {
-        match &self.text_processing {
-            Some(text) => {
-                let new_text = text.clone() + &string[..];
-                self.text_processing = Some(new_text);
-            }
-            None => {
-                self.text_processing = Some(string);
-            }
+    fn get_start(&mut self) -> Position {
+        match self.tokens.get(self.token_counter).unwrap() {
+            Token::Punctuator(_, location) => location.clone().start,
+            _ => unreachable!(),
         }
-    }
-
-    fn clear_string(&mut self) {
-        self.text_processing = None;
     }
 
     fn parse_value(&mut self) -> Option<(String, Position)> {
         self.eat(1); // eat ":"
+        while let Some(Token::Space(_, _)) = self.tokens.get(self.token_counter) {
+            self.eat(1); // eat spaces
+        }
         self.context.push_back(Context::WaitValue);
-        self.clear_string();
         let mut text = String::new();
         loop {
             if let Some(token) = self.tokens.get(self.token_counter) {
@@ -88,7 +87,7 @@ impl Parser {
                             return Some((text, end_loc.end));
                         }
                         _ => {
-                            text.push_str(&string[..]);
+                            text.push_str(string);
                             self.eat(1);
                         }
                     },
@@ -98,7 +97,7 @@ impl Parser {
                     | Token::String(string, _)
                     | Token::Space(string, _)
                     | Token::Word(string, _) => {
-                        text.push_str(&string[..]);
+                        text.push_str(string);
                         self.eat(1);
                     }
                     Token::EndLine(location) => {
@@ -116,14 +115,9 @@ impl Parser {
     }
 
     fn parse_atrule(&mut self) -> Option<NodeType> {
-        let start = match self.tokens.get(self.token_counter).unwrap() {
-            Token::Punctuator(_, location) => location.clone().start,
-            _ => unreachable!(),
-        };
-
+        let _ = self.get_start();
         self.eat(1); // eat "@"
         self.context.push_back(Context::WaitBracketOrColon);
-        self.clear_string();
         let mut text = String::new();
         match self.tokens.get(self.token_counter) {
             Some(Token::Word(name, _)) => {
@@ -136,41 +130,39 @@ impl Parser {
                                 "{" => {
                                     // end, shift to InBracket
                                     self.eat(1);
-                                    self.context.push_back(Context::InBracket);
+                                    self.context.push_back(Context::InBracket(None));
 
                                     // TODO: parse inbracket
                                     self.parse_ambient();
                                     break 'atrule;
                                 }
                                 _ => {
-                                    text.push_str(&string[..]);
+                                    text.push_str(string);
                                     self.eat(1);
                                 }
                             },
                             Token::Punctuator(string, _) => match &string[..] {
                                 ":" => {
                                     // TODO: parse value
-                                    if let Some((value, end)) = self.parse_value() {
-                                        self.context.pop_back();
-
+                                    self.context.pop_back();
+                                    if let Some((value, _)) = self.parse_value() {
                                         let atrule = NodeType::Atrule {
                                             r#type: String::from("atrule"),
                                             name: name,
-                                            source: Location {
-                                                start: start,
-                                                end: end,
-                                            },
+                                            // source: Location {
+                                            //     start: start,
+                                            //     end: end,
+                                            // },
                                             params: value.clone(),
                                             value: Some(value.clone()),
                                         };
-                                        println!("{:?}", atrule);
                                         return Some(atrule);
                                     } else {
                                         // TODO: error
                                     }
                                 }
                                 _ => {
-                                    text.push_str(&string[..]);
+                                    text.push_str(string);
                                     self.eat(1);
                                 }
                             },
@@ -178,7 +170,7 @@ impl Parser {
                             | Token::Number(string, _)
                             | Token::String(string, _)
                             | Token::Word(string, _) => {
-                                text.push_str(&string[..]);
+                                text.push_str(string);
                                 self.eat(1);
                             }
                             Token::Space(_, _) => self.eat(1),
@@ -200,79 +192,133 @@ impl Parser {
         None
     }
 
-    fn parse_ambient(&mut self) {
+    fn parse_ambient(&mut self) -> Vec<NodeType> {
         // parse Initial/InBracket/WaitBracketOrColon context
-        'ambient: loop {
+        let mut text = String::new();
+        let mut nodes: Vec<NodeType> = vec![];
+        loop {
             if let Some(token) = self.tokens.get(self.token_counter) {
                 match token {
-                    Token::Punctuator(string, location) => match &string[..] {
+                    Token::Word(string, _) => {
+                        match self.get_context() {
+                            Some(Context::Initial) | Some(Context::InBracket(_)) => {
+                                self.context.push_back(Context::WaitBracketOrColon);
+                            }
+                            _ => {}
+                        }
+                        text.push_str(string);
+                        self.eat(1);
+                    }
+                    Token::Space(string, _) => match self.get_context() {
+                        Some(Context::WaitBracketOrColon) => {
+                            text.push_str(string);
+                            self.eat(1);
+                        }
+                        _ => {
+                            self.eat(1);
+                        }
+                    },
+                    Token::Punctuator(string, _) => match &string[..] {
                         "@" => {
                             match self.get_context() {
-                                Some(Context::Initial) | Some(Context::InBracket) => {
-                                    // TODO: atrule
-                                    self.parse_atrule();
+                                Some(Context::Initial) | Some(Context::InBracket(_)) => {
+                                    if let Some(rule) = self.parse_atrule() {
+                                        nodes.push(rule);
+                                    }
                                 }
                                 _ => {
-                                    self.push_string(string.to_string());
                                     self.eat(1);
                                 }
                             }
                         }
+                        "&" => {
+                            match self.get_context() {
+                                Some(Context::Initial) | Some(Context::InBracket(_)) => {
+                                    self.context.push_back(Context::WaitBracketOrColon);
+                                }
+                                _ => {}
+                            }
+                            text.push_str(string);
+                            self.eat(1);
+                        }
+                        ":" => {
+                            // TODO: parse value
+                            self.context.pop_back();
+                            if let Some((value, _)) = self.parse_value() {
+                                let decl = NodeType::Decl {
+                                    r#type: String::from("decl"),
+                                    prop: text.clone(),
+                                    value: value,
+                                };
+                                nodes.push(decl);
+                            } else {
+                                // TODO: error
+                            }
+                            text.clear();
+                        }
                         _ => {
-                            self.push_string(string.to_string());
+                            // TODO: error
                             self.eat(1);
                         }
                     },
-                    Token::Paren(string, location) => match &string[..] {
+                    Token::Paren(string, _) => match &string[..] {
                         "{" => {
                             match self.get_context() {
-                                Some(Context::WaitBracket) | Some(Context::WaitBracketOrColon) => {
+                                Some(Context::WaitBracketOrColon) => {
                                     // open bracket
                                     self.eat(1);
-                                    self.context.push_back(Context::InBracket);
-                                    self.parse_ambient();
+                                    self.context.pop_back(); // pop WaitBracketOrColon
+                                    self.context.push_back(Context::InBracket(Some(text.clone())));
+                                    let mut parsed_nodes = self.parse_ambient();
+                                    nodes.append(&mut parsed_nodes);
+
+                                    text.clear();
                                 }
                                 _ => {
-                                    // TODO
-                                    self.push_string(string.to_string());
+                                    // TODO erro?
                                     self.eat(1);
                                 }
                             }
                         }
                         "}" => {
                             match self.get_context() {
-                                Some(Context::InBracket) => {
+                                Some(Context::InBracket(Some(text))) => {
                                     // end bracket
+                                    let rule = NodeType::Rule {
+                                        r#type: String::from("rule"),
+                                        selector: String::from(text.trim_end()),
+                                        nodes: nodes,
+                                    };
                                     self.eat(1);
                                     self.context.pop_back(); // pop InBracket context
-                                    break 'ambient;
+                                    return vec![rule];
                                 }
                                 _ => {
-                                    // TODO
-                                    self.push_string(string.to_string());
+                                    // TODO error?
                                     self.eat(1);
                                 }
                             }
                         }
                         _ => {
-                            // TODO
-                            self.push_string(string.to_string());
+                            // TODO error?
                             self.eat(1);
                         }
                     },
                     _ => {
-                        // TODO
-                        // self.push_string(string.to_string());
+                        // TODO error?
                         self.eat(1);
                     }
                 }
             } else {
-                break 'ambient;
+                return nodes;
             }
         }
     }
 
     pub fn parse(&mut self) {
-        self.parse_ambient();
+        let nodes = self.parse_ambient();
+        dbg!(nodes.clone());
+        let _ = serde_json::to_string(&nodes).unwrap();
+        // dbg!(serialized);
     }
 }

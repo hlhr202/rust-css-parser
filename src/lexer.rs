@@ -3,6 +3,7 @@ use async_std::io::{BufReader, Lines};
 use async_std::prelude::*;
 use regex::Regex;
 use std::io;
+use serde::{Serialize, Deserialize};
 
 lazy_static! {
     // 'testValue\''
@@ -23,19 +24,19 @@ lazy_static! {
     static ref PUNCTUATOR: Regex = Regex::new(r"^[@,:;#&%\+\-\*/\.]").unwrap();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {
     line: usize,
     column: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Location {
     pub start: Position,
     pub end: Position,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Token {
     String(String, Location),
     Paren(String, Location),

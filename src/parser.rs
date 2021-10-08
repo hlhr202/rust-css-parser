@@ -35,18 +35,18 @@ enum Context {
     WaitValue,
 }
 
-pub struct Parser {
+pub struct Parser<'t> {
     context: LinkedList<Context>,
-    tokens: Vec<Token>,
+    tokens: &'t Vec<Token>,
     token_counter: usize,
 }
 
-impl Parser {
+impl Parser<'_> {
     pub fn new(tokens: &Vec<Token>) -> Parser {
         let mut context = LinkedList::new();
         context.push_back(Context::Initial);
         Parser {
-            tokens: tokens.clone(),
+            tokens: tokens,
             context: context,
             token_counter: 0,
         }
@@ -63,7 +63,7 @@ impl Parser {
 
     fn get_start(&mut self) -> Position {
         match self.tokens.get(self.token_counter).unwrap() {
-            Token::Punctuator(_, location) => location.clone().start,
+            Token::Punctuator(_, location) => location.to_owned().start,
             _ => unreachable!(),
         }
     }
@@ -81,7 +81,7 @@ impl Parser {
                     Token::Punctuator(string, location) => match &string[..] {
                         ";" => {
                             // end with ;
-                            let end_loc = location.clone();
+                            let end_loc = location.to_owned();
                             self.eat(1);
                             self.context.pop_back();
                             return Some((text, end_loc.end));
@@ -102,7 +102,7 @@ impl Parser {
                     }
                     Token::EndLine(location) => {
                         // end without ";"
-                        let end_loc = location.clone();
+                        let end_loc = location.to_owned();
                         self.eat(1);
                         self.context.pop_back();
                         return Some((text, end_loc.end));
@@ -121,7 +121,7 @@ impl Parser {
         let mut text = String::new();
         match self.tokens.get(self.token_counter) {
             Some(Token::Word(name, _)) => {
-                let name = name.clone();
+                let name = name.to_owned();
                 self.eat(1); // eat name
                 'atrule: loop {
                     if let Some(token) = self.tokens.get(self.token_counter) {
@@ -153,8 +153,8 @@ impl Parser {
                                             //     start: start,
                                             //     end: end,
                                             // },
-                                            params: value.clone(),
-                                            value: Some(value.clone()),
+                                            params: value.to_owned(),
+                                            value: Some(value.to_owned()),
                                         };
                                         return Some(atrule);
                                     } else {
@@ -247,7 +247,7 @@ impl Parser {
                             if let Some((value, _)) = self.parse_value() {
                                 let decl = NodeType::Decl {
                                     r#type: String::from("decl"),
-                                    prop: text.clone(),
+                                    prop: text.to_owned(),
                                     value: value,
                                 };
                                 nodes.push(decl);
@@ -268,7 +268,7 @@ impl Parser {
                                     // open bracket
                                     self.eat(1);
                                     self.context.pop_back(); // pop WaitBracketOrColon
-                                    self.context.push_back(Context::InBracket(Some(text.clone())));
+                                    self.context.push_back(Context::InBracket(Some(text.to_owned())));
                                     let mut parsed_nodes = self.parse_ambient();
                                     nodes.append(&mut parsed_nodes);
 
@@ -318,7 +318,7 @@ impl Parser {
 
     pub fn parse(&mut self) {
         let nodes = self.parse_ambient();
-        dbg!(nodes.clone());
+        dbg!(nodes.to_owned());
         let _ = serde_json::to_string(&nodes).unwrap();
         // dbg!(serialized);
     }

@@ -1,8 +1,8 @@
 use crate::lexer;
 use lexer::{Position, Token};
-use std::collections::LinkedList;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json;
+use std::collections::LinkedList;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum NodeType {
@@ -30,7 +30,7 @@ enum NodeType {
 #[derive(Debug, Clone)]
 enum Context {
     Initial,
-    InBracket(Option<String>), // InBracket with text context
+    InBracket,
     WaitBracketOrColon,
     WaitValue,
 }
@@ -130,7 +130,7 @@ impl Parser<'_> {
                                 "{" => {
                                     // end, shift to InBracket
                                     self.eat(1);
-                                    self.context.push_back(Context::InBracket(None));
+                                    self.context.push_back(Context::InBracket);
 
                                     // TODO: parse inbracket
                                     self.parse_ambient();
@@ -201,7 +201,7 @@ impl Parser<'_> {
                 match token {
                     Token::Word(string, _) => {
                         match self.get_context() {
-                            Some(Context::Initial) | Some(Context::InBracket(_)) => {
+                            Some(Context::Initial) | Some(Context::InBracket) => {
                                 self.context.push_back(Context::WaitBracketOrColon);
                             }
                             _ => {}
@@ -219,21 +219,19 @@ impl Parser<'_> {
                         }
                     },
                     Token::Punctuator(string, _) => match &string[..] {
-                        "@" => {
-                            match self.get_context() {
-                                Some(Context::Initial) | Some(Context::InBracket(_)) => {
-                                    if let Some(rule) = self.parse_atrule() {
-                                        nodes.push(rule);
-                                    }
-                                }
-                                _ => {
-                                    self.eat(1);
+                        "@" => match self.get_context() {
+                            Some(Context::Initial) | Some(Context::InBracket) => {
+                                if let Some(rule) = self.parse_atrule() {
+                                    nodes.push(rule);
                                 }
                             }
-                        }
+                            _ => {
+                                self.eat(1);
+                            }
+                        },
                         "&" => {
                             match self.get_context() {
-                                Some(Context::Initial) | Some(Context::InBracket(_)) => {
+                                Some(Context::Initial) | Some(Context::InBracket) => {
                                     self.context.push_back(Context::WaitBracketOrColon);
                                 }
                                 _ => {}
@@ -242,8 +240,7 @@ impl Parser<'_> {
                             self.eat(1);
                         }
                         ":" => {
-                            // TODO: parse value
-                            self.context.pop_back();
+                            self.context.pop_back(); // pop WaitBracketOrColon
                             if let Some((value, _)) = self.parse_value() {
                                 let decl = NodeType::Decl {
                                     r#type: String::from("decl"),
@@ -268,11 +265,18 @@ impl Parser<'_> {
                                     // open bracket
                                     self.eat(1);
                                     self.context.pop_back(); // pop WaitBracketOrColon
-                                    self.context.push_back(Context::InBracket(Some(text.to_owned())));
-                                    let mut parsed_nodes = self.parse_ambient();
-                                    nodes.append(&mut parsed_nodes);
-
+                                    self.context.push_back(Context::InBracket);
+                                    let parsed_nodes = self.parse_ambient();
+                                    dbg!(parsed_nodes.clone());
+                                    // end bracket
+                                    let rule = NodeType::Rule {
+                                        r#type: String::from("rule"),
+                                        selector: String::from(text.trim_end()),
+                                        nodes: parsed_nodes,
+                                    };
                                     text.clear();
+                                    self.context.pop_back(); // pop InBracket context
+                                    nodes.push(rule);
                                 }
                                 _ => {
                                     // TODO erro?
@@ -282,16 +286,9 @@ impl Parser<'_> {
                         }
                         "}" => {
                             match self.get_context() {
-                                Some(Context::InBracket(Some(text))) => {
-                                    // end bracket
-                                    let rule = NodeType::Rule {
-                                        r#type: String::from("rule"),
-                                        selector: String::from(text.trim_end()),
-                                        nodes: nodes,
-                                    };
-                                    self.eat(1);
-                                    self.context.pop_back(); // pop InBracket context
-                                    return vec![rule];
+                                Some(Context::InBracket) => {
+                                    self.eat(1); // eat "}"
+                                    return nodes;
                                 }
                                 _ => {
                                     // TODO error?

@@ -1,15 +1,40 @@
 # CSS(less like) parser written in rust (WIP)
 
-I aim to implement a CSS(less like) parser in rust. Currently the code is targeting the PostCSS AST.
-### TODO:
+This project aims to implement a CSS(less like) parser in rust. Currently the code is targeting the PostCSS AST.
+## Features:
+### Nestable CSS Standard
 - [x] rule
 - [x] prop
 - [x] declaration
-- [x] selector
-- [ ] at rule (half complete for variable)
+  - [x] url
+  - [x] hex
+  - [x] string
+  - [x] number
+  - [x] calc
+  - [x] var
+- [x] at rule
+  - [x] media query
+  - [x] import
+  - [x] keyframe
+  - [x] variable
+- [ ] selector
+  - [x] block
+  - [x] class
+  - [x] id
+  - [x] data attribute 
+  - [x] &
+  - [x] ,
+  - [x] +
+  - [x] *
+  - [ ] sudo class
+- [ ] comment
+- [ ] function?
+
+### Diagnostic
 - [ ] location
 - [ ] error report
-- [ ] less function
+
+### APIs
 - [ ] transformer
 - [ ] generator
 

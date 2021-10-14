@@ -1,10 +1,9 @@
 use super::lexer::{Position, Token};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::LinkedList;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum NodeType {
+pub enum NodeType {
     Root,
     Rule {
         r#type: String,
@@ -363,10 +362,9 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> std::vec::Vec<NodeType> {
         let nodes = self.parse_ambient();
         dbg!(nodes.to_owned());
-        let _ = serde_json::to_string(&nodes).unwrap();
-        // dbg!(serialized);
+        nodes
     }
 }

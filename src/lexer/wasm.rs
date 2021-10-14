@@ -1,5 +1,7 @@
 mod lexer;
 
+pub use lexer::{Location, Position, Token, LexerImpl};
+
 pub struct Lexer {
     lexer_impl: lexer::LexerImpl,
 }

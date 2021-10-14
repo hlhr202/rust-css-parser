@@ -1,10 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
-#[path="./lexer/wasm.rs"]
 mod lexer;
-
-#[path="./parser/mod.rs"]
 mod parser;
 
 use wasm_bindgen::prelude::*;

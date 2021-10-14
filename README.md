@@ -37,6 +37,7 @@ This project aims to implement a CSS(less like) parser in rust. Currently the co
 ### APIs
 - [ ] transformer
 - [ ] generator
+- [x] wasm
 
 ### Example
 - input

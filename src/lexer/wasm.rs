@@ -1,9 +1,5 @@
-use async_std::fs::File;
-use async_std::io::{BufReader, Lines};
-use async_std::prelude::*;
 use regex::Regex;
-use std::io;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 lazy_static! {
     // 'testValue\''
@@ -51,15 +47,15 @@ pub enum Token {
 pub struct Lexer {
     column: usize,
     line: usize,
-    lines: Lines<BufReader<File>>,
+    tokens: Vec<Token>,
 }
 
 impl Lexer {
-    pub fn new(lines: Lines<BufReader<File>>) -> Lexer {
+    pub fn new() -> Lexer {
         Lexer {
             column: 0,
             line: 0,
-            lines: lines,
+            tokens: Vec::new(),
         }
     }
 
@@ -96,56 +92,51 @@ impl Lexer {
         }
     }
 
-    pub async fn lex(&mut self) -> io::Result<Vec<Token>> {
-        let mut tokens: Vec<Token> = Vec::new();
-        while let Some(opt_line) = self.lines.next().await {
-            match opt_line {
-                Ok(line) => {
-                    let mut current = line.clone();
-                    self.column = 0;
-                    'loop_for_token: loop {
-                        let result = self
-                            .match_rule(&current, &HEX_VALUE, Token::Hex)
-                            .or_else(|| self.match_rule(&current, &WORD, Token::Word))
-                            .or_else(|| self.match_rule(&current, &NUMBER, Token::Number))
-                            .or_else(|| self.match_rule(&current, &SPACE, Token::Space))
-                            .or_else(|| {
-                                self.match_rule(&current, &SINGLE_QUOTE_STRING, Token::String)
-                            })
-                            .or_else(|| {
-                                self.match_rule(&current, &DOUBLE_QUOTE_STRING, Token::String)
-                            })
-                            .or_else(|| self.match_rule(&current, &PAREN, Token::Paren))
-                            .or_else(|| self.match_rule(&current, &PUNCTUATOR, Token::Punctuator));
+    fn loop_line_for_token(&mut self, line: &String) {
+        let mut current = line.clone();
+        self.column = 0;
+        'loop_for_token: loop {
+            let result = self
+                .match_rule(&current, &HEX_VALUE, Token::Hex)
+                .or_else(|| self.match_rule(&current, &WORD, Token::Word))
+                .or_else(|| self.match_rule(&current, &NUMBER, Token::Number))
+                .or_else(|| self.match_rule(&current, &SPACE, Token::Space))
+                .or_else(|| self.match_rule(&current, &SINGLE_QUOTE_STRING, Token::String))
+                .or_else(|| self.match_rule(&current, &DOUBLE_QUOTE_STRING, Token::String))
+                .or_else(|| self.match_rule(&current, &PAREN, Token::Paren))
+                .or_else(|| self.match_rule(&current, &PUNCTUATOR, Token::Punctuator));
 
-                        match result {
-                            Some((matched, rest)) => {
-                                current = String::from(rest);
-                                tokens.push(*matched);
-                            }
-                            None => {
-                                // unexpected token found or no matched at the end, break this line
-                                break 'loop_for_token;
-                            }
-                        }
-                    }
-                    let start = Position {
-                        column: self.column,
-                        line: self.line,
-                    };
-                    let end = Position {
-                        column: self.column,
-                        line: self.line,
-                    };
-                    tokens.push(Token::EndLine(Location {
-                        start: start,
-                        end: end,
-                    }));
-                    self.line += 1;
+            match result {
+                Some((matched, rest)) => {
+                    current = String::from(rest);
+                    self.tokens.push(*matched);
                 }
-                _ => {}
+                None => {
+                    // unexpected token found or no matched at the end, break this line
+                    break 'loop_for_token;
+                }
             }
         }
-        Ok(tokens)
+        let start = Position {
+            column: self.column,
+            line: self.line,
+        };
+        let end = Position {
+            column: self.column,
+            line: self.line,
+        };
+        self.tokens.push(Token::EndLine(Location {
+            start: start,
+            end: end,
+        }));
+        self.line += 1;
+    }
+
+    pub fn lex_from_source(&mut self, source: &String) -> Vec<Token> {
+        let mut lines = source.lines();
+        while let Some(opt_line) = lines.next() {
+            self.loop_line_for_token(&opt_line.to_owned());
+        }
+        self.tokens.clone()
     }
 }

@@ -1,5 +1,4 @@
-use crate::lexer;
-use lexer::{Position, Token};
+use super::lexer::{Position, Token};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::LinkedList;

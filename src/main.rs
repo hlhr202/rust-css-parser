@@ -3,28 +3,15 @@ extern crate lazy_static;
 
 mod lexer;
 mod parser;
+mod test;
 
-use async_std::fs::File;
-use async_std::io::BufReader;
-use async_std::prelude::*;
 use std::io;
 
 use async_std::task;
 use std::env;
 
-async fn read(path: &String) -> io::Result<()> {
-    let file = File::open(path).await?;
-    let reader = BufReader::new(file);
-    let lines = reader.lines();
-    let tokens = lexer::Lexer::new(lines).lex().await?;
-    let mut index = 0;
-    while let Some(token) = tokens.get(index) {
-        index += 1;
-        println!("{:?}", token);
-    }
-    println!();
-    println!();
-    println!();
+async fn read_file(path: &String) -> io::Result<()> {
+    let tokens = lexer::Lexer::new().lex_from_path(path).await?;
     let mut parser = parser::Parser::new(&tokens);
     parser.parse();
     Ok(())
@@ -37,7 +24,7 @@ fn main() {
     }
     task::block_on(async {
         if let Some(path) = args.get(1) {
-            let _ = read(path).await;
+            let _ = read_file(path).await;
         }
     });
 }

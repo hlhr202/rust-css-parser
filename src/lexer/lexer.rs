@@ -16,8 +16,8 @@ lazy_static! {
     static ref SPACE: Regex = Regex::new(r"^\s{1,}").unwrap();
     // {}()[]
     static ref PAREN: Regex = Regex::new(r"^[\{\}\(\)\[\]]").unwrap();
-    // @,:;#&%+-*/.
-    static ref PUNCTUATOR: Regex = Regex::new(r"^[@,:;#&%\+\-\*/\.]").unwrap();
+    // \!@,:;#&%+-*/.
+    static ref PUNCTUATOR: Regex = Regex::new(r"^[!@,:;#&%\+\-\*/\.]").unwrap();
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

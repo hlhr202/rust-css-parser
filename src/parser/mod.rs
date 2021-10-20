@@ -22,6 +22,7 @@ pub enum NodeType {
         r#type: String,
         prop: String,
         value: String,
+        important: Option<bool>,
     },
     // Comment,
 }
@@ -68,12 +69,43 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_value(&mut self) -> Option<(String, Position)> {
+    fn search_important(&mut self) -> Option<String> {
+        let saved = self.token_counter;
+        let mut text = String::new();
+        loop {
+            if let Some(token) = self.tokens.get(self.token_counter) {
+                match token {
+                    Token::Word(string, _) => match &string[..] {
+                        "important" => {
+                            text.push_str(string);
+                            self.eat(1);
+                            return Some(text);
+                        }
+                        _ => {
+                            self.token_counter = saved;
+                            return None;
+                        }
+                    },
+                    Token::Space(string, _) => {
+                        text.push_str(string);
+                        self.eat(1);
+                    }
+                    _ => {
+                        self.token_counter = saved;
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+
+    fn parse_value(&mut self) -> Option<(String, Position, bool)> {
         while let Some(Token::Space(_, _)) = self.tokens.get(self.token_counter) {
             self.eat(1); // eat spaces
         }
         self.context.push_back(Context::WaitValue);
         let mut text = String::new();
+        let mut important = false;
         loop {
             if let Some(token) = self.tokens.get(self.token_counter) {
                 match token {
@@ -84,7 +116,22 @@ impl Parser<'_> {
                                 self.eat(1); // eat ";"
                                 let end_loc = location.to_owned();
                                 self.context.pop_back();
-                                return Some((text, end_loc.end));
+                                return Some((text, end_loc.end, important));
+                            }
+                            "!" => {
+                                // loopback for space
+                                if let Some(Token::Space(_, _)) =
+                                    self.tokens.get(self.token_counter - 1)
+                                {
+                                    self.eat(1); // eat "!"
+                                                 // TODO: add important location
+                                    if let Some(_) = self.search_important() {
+                                        important = true;
+                                    }
+                                } else {
+                                    text.push_str(string);
+                                    self.eat(1);
+                                }
                             }
                             _ => {
                                 text.push_str(string);
@@ -106,7 +153,7 @@ impl Parser<'_> {
                         let end_loc = location.to_owned();
                         self.eat(1);
                         self.context.pop_back();
-                        return Some((text, end_loc.end));
+                        return Some((text, end_loc.end, important));
                     }
                 }
             } else {
@@ -190,7 +237,14 @@ impl Parser<'_> {
                                     } else {
                                         self.context.pop_back(); // pop WaitBraceOrColon
                                         self.eat(1); // eat ":"
-                                        if let Some((value, _)) = self.parse_value() {
+                                        if let Some((value, _, important)) = self.parse_value() {
+                                            let real_value = if important {
+                                                let mut v = value.to_owned();
+                                                v.push_str("!important");
+                                                v
+                                            } else {
+                                                value.to_owned()
+                                            };
                                             let atrule = NodeType::Atrule {
                                                 r#type: String::from("atrule"),
                                                 name: name,
@@ -198,8 +252,8 @@ impl Parser<'_> {
                                                 //     start: start,
                                                 //     end: end,
                                                 // },
-                                                params: value.to_owned(),
-                                                value: Some(value.to_owned()),
+                                                params: real_value.to_owned(),
+                                                value: Some(real_value.to_owned()),
                                                 nodes: None,
                                             };
                                             return Some(atrule);
@@ -291,11 +345,12 @@ impl Parser<'_> {
                             // TODO: parse value and parse sudo class
                             self.context.pop_back(); // pop WaitBraceOrColon
                             self.eat(1); // eat ":"
-                            if let Some((value, _)) = self.parse_value() {
+                            if let Some((value, _, important)) = self.parse_value() {
                                 let decl = NodeType::Decl {
                                     r#type: String::from("decl"),
                                     prop: text.to_owned(),
                                     value: value,
+                                    important: if important { Some(true) } else { None },
                                 };
                                 nodes.push(decl);
                             } else {

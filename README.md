@@ -12,6 +12,7 @@ This project aims to implement a CSS(less like) parser in rust. Currently the co
   - [x] number
   - [x] calc
   - [x] var
+  - [x] !important
 - [x] at rule
   - [x] media query
   - [x] import

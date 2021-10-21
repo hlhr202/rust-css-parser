@@ -71,15 +71,24 @@ impl Parser<'_> {
 
     fn search_important(&mut self) -> Option<String> {
         let saved = self.token_counter;
+        self.eat(1); // eat "!"
         let mut text = String::new();
         loop {
             if let Some(token) = self.tokens.get(self.token_counter) {
                 match token {
+                    Token::Punctuator(string, _) => match &string[..] {
+                        ";" => {
+                            return Some(text);
+                        }
+                        _ => {
+                            self.token_counter = saved;
+                            return None;
+                        }
+                    },
                     Token::Word(string, _) => match &string[..] {
                         "important" => {
                             text.push_str(string);
                             self.eat(1);
-                            return Some(text);
                         }
                         _ => {
                             self.token_counter = saved;
@@ -119,14 +128,16 @@ impl Parser<'_> {
                                 return Some((text, end_loc.end, important));
                             }
                             "!" => {
-                                // loopback for space
+                                // lookback for space
                                 if let Some(Token::Space(_, _)) =
                                     self.tokens.get(self.token_counter - 1)
                                 {
-                                    self.eat(1); // eat "!"
-                                                 // TODO: add important location
+                                    // TODO: add important location
                                     if let Some(_) = self.search_important() {
                                         important = true;
+                                    } else {
+                                        text.push_str(string);
+                                        self.eat(1);
                                     }
                                 } else {
                                     text.push_str(string);

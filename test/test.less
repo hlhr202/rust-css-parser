@@ -23,6 +23,9 @@ main {
     }
     div + p {
         list-style: "|";
+        :after {
+            content: "test";
+        }
     }
     .test-1, #test2 {
         --theme-color: var(--white);

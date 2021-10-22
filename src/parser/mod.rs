@@ -69,6 +69,15 @@ impl Parser<'_> {
         }
     }
 
+    /// processing exclamation mark ambiguity
+    /// 
+    /// search for important, accept space before "important" keyword
+    ///
+    /// # Examples
+    ///
+    /// eg. "white !important;" -> return "!important"
+    ///
+    /// eg. "white ! important;" -> return "! important"
     fn search_important(&mut self) -> Option<String> {
         let saved = self.token_counter;
         self.eat(1); // eat "!"
@@ -108,6 +117,7 @@ impl Parser<'_> {
         }
     }
 
+    /// return Option(value, position, important)
     fn parse_value(&mut self) -> Option<(String, Position, bool)> {
         while let Some(Token::Space(_, _)) = self.tokens.get(self.token_counter) {
             self.eat(1); // eat spaces
@@ -207,7 +217,7 @@ impl Parser<'_> {
                                     // end, shift to InBrace
                                     self.eat(1);
                                     self.context.push_back(Context::InBrace);
-                                    let nodes = self.parse_ambient();
+                                    let nodes = self.parse_nodes();
                                     self.context.pop_back(); // pop InBrace
                                     let atrule = NodeType::Atrule {
                                         r#type: String::from("atrule"),
@@ -305,7 +315,68 @@ impl Parser<'_> {
         None
     }
 
-    fn parse_ambient(&mut self) -> Vec<NodeType> {
+    /// processing colon ambiguity
+    ///
+    /// return Option(sudoclass selector)
+    fn search_sudoclass(&mut self) -> Option<String> {
+        let saved = self.token_counter;
+        let mut text = String::new();
+        text.push_str(":");
+        self.eat(1); // eat ":"
+        if let Some(Token::Punctuator(string, _)) = self.tokens.get(self.token_counter) {
+            if string == ":" {
+                text.push_str(string);
+                self.eat(1);
+                return Some(text);
+            }
+        }
+        loop {
+            if let Some(token) = self.tokens.get(self.token_counter) {
+                match token {
+                    Token::Paren(string, _) => match &string[..] {
+                        "{" => {
+                            // all previous texts are selector
+                            return Some(text);
+                        }
+                        _ => {
+                            text.push_str(string);
+                            self.eat(1);
+                        }
+                    },
+                    Token::Punctuator(string, _) => match &string[..] {
+                        ":" => {
+                            // all previous texts are selector
+                            return Some(text);
+                        }
+                        ";" => {
+                            // all previous texts are value
+                            self.token_counter = saved;
+                            return None;
+                        }
+                        _ => {
+                            text.push_str(string);
+                            self.eat(1);
+                        }
+                    },
+                    Token::String(string, _)
+                    | Token::Hex(string, _)
+                    | Token::Number(string, _)
+                    | Token::Space(string, _)
+                    | Token::Word(string, _) => {
+                        text.push_str(string);
+                        self.eat(1);
+                    }
+                    Token::EndLine(_) => {
+                        // all previous texts are value
+                        self.token_counter = saved;
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+
+    fn parse_nodes(&mut self) -> Vec<NodeType> {
         // parse Initial/InBrace/WaitBraceOrColon context
         let mut text = String::new();
         let mut nodes: Vec<NodeType> = vec![];
@@ -354,20 +425,30 @@ impl Parser<'_> {
                         }
                         ":" => {
                             // TODO: parse value and parse sudo class
-                            self.context.pop_back(); // pop WaitBraceOrColon
-                            self.eat(1); // eat ":"
-                            if let Some((value, _, important)) = self.parse_value() {
-                                let decl = NodeType::Decl {
-                                    r#type: String::from("decl"),
-                                    prop: text.to_owned(),
-                                    value: value,
-                                    important: if important { Some(true) } else { None },
-                                };
-                                nodes.push(decl);
+                            if let Some(string) = self.search_sudoclass() {
+                                match self.get_context() {
+                                    Some(Context::Initial) | Some(Context::InBrace) => {
+                                        self.context.push_back(Context::WaitBraceOrColon);
+                                    }
+                                    _ => {}
+                                }
+                                text.push_str(&string);
                             } else {
-                                // TODO: error
+                                self.context.pop_back(); // pop WaitBraceOrColon
+                                self.eat(1); // eat ":"
+                                if let Some((value, _, important)) = self.parse_value() {
+                                    let decl = NodeType::Decl {
+                                        r#type: String::from("decl"),
+                                        prop: text.to_owned(),
+                                        value: value,
+                                        important: if important { Some(true) } else { None },
+                                    };
+                                    nodes.push(decl);
+                                } else {
+                                    // TODO: error
+                                }
+                                text.clear();
                             }
-                            text.clear();
                         }
                         _ => {
                             text.push_str(string);
@@ -382,7 +463,7 @@ impl Parser<'_> {
                                     self.eat(1);
                                     self.context.pop_back(); // pop WaitBraceOrColon
                                     self.context.push_back(Context::InBrace);
-                                    let parsed_nodes = self.parse_ambient();
+                                    let parsed_nodes = self.parse_nodes();
                                     self.context.pop_back(); // pop InBrace context
                                                              // end Brace
                                     let rule = NodeType::Rule {
@@ -429,7 +510,7 @@ impl Parser<'_> {
     }
 
     pub fn parse(&mut self) -> std::vec::Vec<NodeType> {
-        let nodes = self.parse_ambient();
+        let nodes = self.parse_nodes();
         dbg!(nodes.to_owned());
         nodes
     }

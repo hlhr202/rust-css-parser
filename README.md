@@ -27,7 +27,8 @@ This project aims to implement a CSS(less like) parser in rust. Currently the co
   - [x] ,
   - [x] +
   - [x] *
-  - [ ] sudo class
+  - [x] sudo class
+  - [ ] more W3C standard to be tested...
 - [ ] comment
 - [ ] function?
 

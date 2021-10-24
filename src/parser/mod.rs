@@ -47,8 +47,8 @@ impl Parser<'_> {
         let mut context = LinkedList::new();
         context.push_back(Context::Initial);
         Parser {
-            tokens: tokens,
-            context: context,
+            tokens,
+            context,
             token_counter: 0,
         }
     }
@@ -71,7 +71,7 @@ impl Parser<'_> {
     }
 
     /// processing exclamation mark ambiguity
-    /// 
+    ///
     /// search for important, accept space before "important" keyword
     ///
     /// # Examples
@@ -222,7 +222,7 @@ impl Parser<'_> {
                                     self.context.pop_back(); // pop InBrace
                                     let atrule = NodeType::Atrule {
                                         r#type: String::from("atrule"),
-                                        name: name,
+                                        name,
                                         params: String::from(text.trim()),
                                         value: None,
                                         nodes: Some(nodes),
@@ -241,7 +241,7 @@ impl Parser<'_> {
                                     if text.len() > 0 {
                                         let atrule = NodeType::Atrule {
                                             r#type: String::from("atrule"),
-                                            name: name.to_owned(),
+                                            name,
                                             params: text.trim().to_owned(),
                                             value: None,
                                             nodes: None,
@@ -269,7 +269,7 @@ impl Parser<'_> {
                                             };
                                             let atrule = NodeType::Atrule {
                                                 r#type: String::from("atrule"),
-                                                name: name,
+                                                name,
                                                 // source: Location {
                                                 //     start: start,
                                                 //     end: end,
@@ -441,7 +441,7 @@ impl Parser<'_> {
                                     let decl = NodeType::Decl {
                                         r#type: String::from("decl"),
                                         prop: text.to_owned(),
-                                        value: value,
+                                        value,
                                         important: if important { Some(true) } else { None },
                                     };
                                     nodes.push(decl);
@@ -460,13 +460,13 @@ impl Parser<'_> {
                         "{" => {
                             match self.get_context() {
                                 Some(Context::WaitBraceOrColon) => {
-                                    // open Brace
                                     self.eat(1);
-                                    self.context.pop_back(); // pop WaitBraceOrColon
+                                    // pop WaitBraceOrColon
+                                    self.context.pop_back();
                                     self.context.push_back(Context::InBrace);
                                     let parsed_nodes = self.parse_nodes();
-                                    self.context.pop_back(); // pop InBrace context
-                                                             // end Brace
+                                    // pop InBrace context end Brace
+                                    self.context.pop_back();
                                     let rule = NodeType::Rule {
                                         r#type: String::from("rule"),
                                         selector: String::from(text.trim_end()),

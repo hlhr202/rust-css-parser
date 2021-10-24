@@ -62,38 +62,31 @@ impl LexerImpl {
     fn match_rule<'a, F: (FnOnce(String, Location) -> Token)>(
         &mut self,
         string: &'a str,
-        rule: &'a Regex,
+        rule: &Regex,
         construct: F,
-    ) -> Option<(Box<Token>, &'a str)> {
+    ) -> Option<(Token, &'a str)> {
         if let Some(matched) = rule.find(string) {
-            let start = matched.start();
-            let end = matched.end();
-            let rest = &string[end..];
-            let start_pos = Position {
-                column: start + self.column,
+            let start_pos = matched.start();
+            let end_pos = matched.end();
+            let rest = &string[end_pos..];
+            let start = Position {
+                column: start_pos + self.column,
                 line: self.line,
             };
-            let end_pos = Position {
-                column: end + self.column,
+            let end = Position {
+                column: end_pos + self.column,
                 line: self.line,
             };
-            self.column += end;
-            let token = construct(
-                String::from(matched.as_str()),
-                Location {
-                    start: start_pos,
-                    end: end_pos,
-                },
-            );
-            // Box here in case we cant move token from inside function
-            Some((Box::new(token), rest))
+            self.column += end_pos;
+            let token = construct(String::from(matched.as_str()), Location { start, end });
+            Some((token, rest))
         } else {
             None
         }
     }
 
     pub fn loop_line_for_token(&mut self, line: &String) {
-        let mut current = line.clone();
+        let mut current = line.to_owned();
         self.column = 0;
         'loop_for_token: loop {
             let result = self
@@ -107,9 +100,9 @@ impl LexerImpl {
                 .or_else(|| self.match_rule(&current, &PUNCTUATOR, Token::Punctuator));
 
             match result {
-                Some((matched, rest)) => {
+                Some((token, rest)) => {
                     current = String::from(rest);
-                    self.tokens.push(*matched);
+                    self.tokens.push(token);
                 }
                 None => {
                     // unexpected token found or no matched at the end, break this line
@@ -125,10 +118,7 @@ impl LexerImpl {
             column: self.column,
             line: self.line,
         };
-        self.tokens.push(Token::EndLine(Location {
-            start: start,
-            end: end,
-        }));
+        self.tokens.push(Token::EndLine(Location { start, end }));
         self.line += 1;
     }
 }

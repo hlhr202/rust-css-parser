@@ -53,6 +53,7 @@ impl Parser<'_> {
         }
     }
 
+    /// peek the last context in the context stack
     fn get_context(&self) -> Option<&Context> {
         self.context.back()
     }

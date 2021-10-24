@@ -18,6 +18,7 @@ impl Lexer {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn lex_from_path(&mut self, path: &String) -> io::Result<Vec<Token>> {
         let file = File::open(path).await?;
         let reader = BufReader::new(file);
@@ -31,10 +32,11 @@ impl Lexer {
         Ok(self.lexer_impl.tokens.clone())
     }
 
+    #[allow(dead_code)]
     pub fn lex_from_source(&mut self, source: &String) -> Vec<Token> {
         let mut lines = source.lines();
         while let Some(opt_line) = lines.next() {
-            self.lexer_impl.loop_line_for_token(&opt_line.to_owned());
+            self.lexer_impl.loop_line_for_token(&opt_line.to_string());
         }
         self.lexer_impl.tokens.clone()
     }

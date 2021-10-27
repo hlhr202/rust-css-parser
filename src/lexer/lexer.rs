@@ -41,6 +41,7 @@ pub enum Token {
     Space(String, Location),
     Hex(String, Location),
     Number(String, Location),
+    Other(String),
     EndLine(Location),
 }
 
@@ -105,8 +106,18 @@ impl LexerImpl {
                     self.tokens.push(token);
                 }
                 None => {
-                    // unexpected token found or no matched at the end, break this line
-                    break 'loop_for_token;
+                    if !current.is_empty() {
+                        // no matched but there are still text in line, pass it as Other token
+                        let text = current[0..1].to_owned();
+                        let rest = &current[1..];
+                        self.column += 1;
+                        current = String::from(rest);
+                        let token = Token::Other(text);
+                        self.tokens.push(token);
+                    } else {
+                        // no matched at the end, break this line
+                        break 'loop_for_token;
+                    }
                 }
             }
         }

@@ -166,6 +166,7 @@ impl Parser<'_> {
                     | Token::Number(string, _)
                     | Token::String(string, _)
                     | Token::Space(string, _)
+                    | Token::Other(string)
                     | Token::Word(string, _) => {
                         text.push_str(string);
                         self.eat(1);
@@ -294,6 +295,7 @@ impl Parser<'_> {
                             | Token::Number(string, _)
                             | Token::String(string, _)
                             | Token::Space(string, _)
+                            | Token::Other(string)
                             | Token::Word(string, _) => {
                                 text.push_str(string);
                                 self.eat(1);
@@ -363,6 +365,7 @@ impl Parser<'_> {
                     | Token::Hex(string, _)
                     | Token::Number(string, _)
                     | Token::Space(string, _)
+                    | Token::Other(string)
                     | Token::Word(string, _) => {
                         text.push_str(string);
                         self.eat(1);
